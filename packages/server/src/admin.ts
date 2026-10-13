@@ -431,6 +431,15 @@ export async function handleAdmin(req: AdminRequest, deps: AdminDeps): Promise<A
       return ok(await tenantView(id, deps));
     }
 
+    const connEnabled = /^\/connections\/(meta|google_ads)\/enabled$/.exec(rest);
+    if (connEnabled && method === 'POST') {
+      if (typeof body.enabled !== 'boolean') return fail(400, 'enabled_required', 'Say whether sending is on (true or false).');
+      const repo = deps.connectionsFor(id);
+      const kind = connEnabled[1] as 'meta' | 'google_ads';
+      if (!(await repo.setEnabled(kind, body.enabled, now))) return fail(404, 'not_connected', 'Connect this platform first.');
+      return ok(await repo.get(kind));
+    }
+
     const conn = /^\/connections\/(meta|google_ads)$/.exec(rest);
     if (conn) {
       const kind = conn[1] as 'meta' | 'google_ads';

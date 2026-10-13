@@ -80,12 +80,20 @@ const salesOf = (tenantId: string) => {
 };
 const connectionsOf = (tenantId: string) => new ConnectionsRepo(db, box, tenantId);
 
+const DESTINATION_NAMES = { meta: 'Meta', google_ads: 'Google Ads' } as const;
+
 /** Why this brand may not send right now (the server's setting, then the operator's pause), or null. */
 const sendBlockedFor = (tenantId: string, fresh = false) => async (destination?: string): Promise<string | null> => {
   const fromSettings = sendBlockReason(sendPolicy, tenantId, destination);
   if (fromSettings) return fromSettings;
   const pause = await sendControl.get({ fresh });
-  return pause.paused ? `Sending is paused by an operator${pause.reason ? ` (${pause.reason})` : ''}. Nothing was sent.` : null;
+  if (pause.paused) return `Sending is paused by an operator${pause.reason ? ` (${pause.reason})` : ''}. Nothing was sent.`;
+  // The brand's own per-platform switch. A platform that is not connected is not "off": that case has its own handling.
+  if (destination === 'meta' || destination === 'google_ads') {
+    const conn = await connectionsOf(tenantId).get(destination).catch(() => null);
+    if (conn && !conn.enabled) return `Sending to ${DESTINATION_NAMES[destination]} is switched off for this brand. Nothing was sent; the sales are waiting.`;
+  }
+  return null;
 };
 
 const sendOverview = async () => {
