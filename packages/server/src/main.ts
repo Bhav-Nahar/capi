@@ -138,7 +138,7 @@ async function dispatchAll() {
 
 const server = createHttpServer({
   trackerFile: env('TRACKER_FILE') ?? new URL('../../tracker/dist/tracker.js', import.meta.url).pathname,
-  adminUiDir: env('ADMIN_UI_DIR') ?? new URL('../../admin-ui/dist', import.meta.url).pathname,
+  adminUiDir: env('ADMIN_UI_DIR') ?? new URL('../../admin-next/dist', import.meta.url).pathname,
   findSite: async (key) => {
     const found = await registry.findSite(key);
     if (!found) return null;
