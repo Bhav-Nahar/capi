@@ -15,6 +15,10 @@ export interface PersonHashes {
   metaCountry?: string;
   /** The brand's own customer ID, hashed. */
   metaExternalId?: string;
+  /** Date of birth as YYYYMMDD, hashed. */
+  metaDob?: string;
+  /** "f" or "m", hashed. */
+  metaGender?: string;
   googleFirstName?: string;
   googleLastName?: string;
   /** As given: Google takes the country code and postal code of an address unhashed. */

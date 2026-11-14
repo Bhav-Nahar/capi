@@ -1,3 +1,4 @@
+import type { PlaceholderEmailRule } from './hash';
 import type { Channel, ConsentPolicy, Destination } from './types';
 
 /**
@@ -54,6 +55,8 @@ export interface TenantConfig {
   retentionDays: number;
   /** Per-source field mappings. */
   sources: { zoho?: ZohoMapping };
+  /** Made-up emails this brand's systems create, dropped before matching and sending. Unset = keep every email. */
+  placeholderEmails?: PlaceholderEmailRule;
   createdAt: Date;
 }
 

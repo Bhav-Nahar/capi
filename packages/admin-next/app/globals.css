@@ -1,43 +1,30 @@
 @import "tailwindcss";
 
-/* Colors are tokens, so light and dark are one switch. */
+/*
+ * One dark theme. Colors are tokens: change them here, never in a component.
+ *   Grey   #2b2d31  page background; cards and controls sit one or two steps lighter.
+ *   Silver #d9dadc  text (9.9:1 on the background).
+ *   Yellow #ffc93c  the one thing to look at: primary actions, the current tab or filter, focus, links, progress.
+ *                   Text on yellow is near-black (10.7:1). Warnings use orange, so a warning never looks like a button.
+ */
 :root {
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --surface-2: #f1f3f6;
-  --border: #e3e6eb;
-  --text: #14171c;
-  --muted: #5d6673;
-  --accent: #4f46e5;
-  --accent-contrast: #ffffff;
-  --ok: #0f7b4b;
-  --ok-bg: #e4f5ec;
-  --warn: #8a5a00;
-  --warn-bg: #fdf1d6;
-  --bad: #b3261e;
-  --bad-bg: #fbe6e4;
-}
-:root[data-theme="dark"] {
-  --bg: #0e1013;
-  --surface: #161a1f;
-  --surface-2: #1d2228;
-  --border: #29303a;
-  --text: #eceff3;
-  --muted: #9aa4b2;
-  --accent: #8b87ff;
-  --accent-contrast: #0e1013;
+  color-scheme: dark;
+  --bg: #2b2d31;
+  --surface: #313338;
+  --surface-2: #383a40;
+  --border: #45474e;
+  --text: #d9dadc;
+  --muted: #a3a6ab;
+  --accent: #ffc93c;
+  --accent-hover: #ffd666;
+  --accent-soft: #3d3420;
+  --accent-contrast: #1e1f22;
   --ok: #5fd39a;
-  --ok-bg: #12301f;
-  --warn: #f2c35b;
-  --warn-bg: #33270a;
-  --bad: #ff8a80;
-  --bad-bg: #3a1714;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0e1013; --surface: #161a1f; --surface-2: #1d2228; --border: #29303a; --text: #eceff3; --muted: #9aa4b2;
-    --accent: #8b87ff; --accent-contrast: #0e1013; --ok: #5fd39a; --ok-bg: #12301f; --warn: #f2c35b; --warn-bg: #33270a; --bad: #ff8a80; --bad-bg: #3a1714;
-  }
+  --ok-bg: #20372b;
+  --warn: #ff9f43;
+  --warn-bg: #3d2e1c;
+  --bad: #ff7b72;
+  --bad-bg: #3f2526;
 }
 
 @theme inline {
@@ -48,6 +35,8 @@
   --color-text: var(--text);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
   --color-accent-contrast: var(--accent-contrast);
   --color-ok: var(--ok);
   --color-ok-bg: var(--ok-bg);
@@ -59,6 +48,7 @@
 }
 
 html { background: var(--bg); color: var(--text); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
-body { min-height: 100vh; }
+body { min-height: 100vh; background: var(--bg); }
+::selection { background: var(--accent); color: var(--accent-contrast); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }

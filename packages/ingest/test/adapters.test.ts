@@ -149,7 +149,7 @@ describe('mapGenericSale', () => {
 
 describe('customer details', () => {
   it('the standard JSON accepts name, place and customer ID', () => {
-    const r = mapGenericSale({ eventId: 'e1', channel: 'store', occurredAt: '2026-10-07T10:00:00+05:30', firstName: 'Priya', lastName: 'Shah', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India', customerId: 'C-9' });
+    const r = mapGenericSale({ eventId: 'e1', channel: 'store', occurredAt: '2026-10-07T10:00:00+05:30', value: 100, firstName: 'Priya', lastName: 'Shah', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India', customerId: 'C-9' });
     expect(r.ok && r.sale).toMatchObject({ firstName: 'Priya', lastName: 'Shah', city: 'Pune', state: 'MH', postalCode: '411001', country: 'India', customerId: 'C-9' });
   });
 
@@ -164,7 +164,7 @@ describe('customer details', () => {
 });
 
 describe('the standard JSON is as strict as the file import', () => {
-  const base = { eventId: 'e1', channel: 'store', occurredAt: '2026-10-07T10:00:00+05:30' };
+  const base = { eventId: 'e1', channel: 'store', occurredAt: '2026-10-07T10:00:00+05:30', value: 100 };
   it('refuses a consent that is not true or false, and a day that does not exist', () => {
     expect(mapGenericSale({ ...base, consent: 'noo' })).toMatchObject({ ok: false, reason: 'invalid_consent' });
     expect(mapGenericSale({ ...base, consent: 'yes' })).toMatchObject({ ok: false, reason: 'invalid_consent' });

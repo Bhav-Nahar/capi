@@ -190,8 +190,8 @@ describe.skipIf(!emulator)('dispatchDue (Firestore emulator, fake Meta/Google)',
     const good = fakePlatforms();
     await dispatchDue({ ...s, http: { fetchImpl: good as never }, now });
     expect((await s.sales.getDeliveries(saleKey)).find((d) => d.destination === 'meta')?.status).toBe('sent');
-    const used = good.mock.calls.find(([u]) => String(u).includes('graph.facebook.com'))![0];
-    expect(String(used)).toContain('NEW-TOKEN');
+    const used = good.mock.calls.find(([u]) => String(u).includes('graph.facebook.com'))!;
+    expect(((used as unknown as [string, RequestInit])[1].headers as Record<string, string>).authorization).toBe('Bearer NEW-TOKEN');
   });
 
   it('waits without using up attempts while a brand has not connected an account', async () => {

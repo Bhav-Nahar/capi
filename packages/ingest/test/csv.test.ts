@@ -65,24 +65,24 @@ describe('salesFromCsv', () => {
 });
 
 describe('a file that looks fine but is not', () => {
-  const head = 'eventId,channel,occurredAt,consent\n';
+  const head = 'eventId,channel,occurredAt,value,consent\n';
 
   it('refuses a consent value it does not recognise, instead of reading it as "not stated"', () => {
     for (const bad of ['noo', 'maybe', 'nope', '2']) {
-      const { rows } = salesFromCsv(`${head}A1,store,2026-10-07,${bad}`);
+      const { rows } = salesFromCsv(`${head}A1,store,2026-10-07,100,${bad}`);
       expect(rows[0]!.ok).toBe(false);
       expect(rows[0]!.error).toContain('consent must be yes or no');
     }
-    expect(salesFromCsv(`${head}A1,store,2026-10-07,`).rows[0]!.ok).toBe(true); // empty = not stated
-    expect(salesFromCsv(`${head}A1,store,2026-10-07,Yes`).rows[0]!.sale?.consent).toBe(true);
-    expect(salesFromCsv(`${head}A1,store,2026-10-07,N`).rows[0]!.sale?.consent).toBe(false);
+    expect(salesFromCsv(`${head}A1,store,2026-10-07,100,`).rows[0]!.ok).toBe(true); // empty = not stated
+    expect(salesFromCsv(`${head}A1,store,2026-10-07,100,Yes`).rows[0]!.sale?.consent).toBe(true);
+    expect(salesFromCsv(`${head}A1,store,2026-10-07,100,N`).rows[0]!.sale?.consent).toBe(false);
   });
 
   it('refuses days that do not exist, dates and timestamps alike', () => {
     for (const bad of ['2026-02-30', '2026-04-31', '2026-13-01', '2026-02-29', '2026-02-30T10:00:00+05:30']) {
-      expect(salesFromCsv(`${head}A1,store,${bad},yes`).rows[0]!.ok).toBe(false);
+      expect(salesFromCsv(`${head}A1,store,${bad},100,yes`).rows[0]!.ok).toBe(false);
     }
-    expect(salesFromCsv(`${head}A1,store,2028-02-29,yes`).rows[0]!.ok).toBe(true); // a real leap day
+    expect(salesFromCsv(`${head}A1,store,2024-02-29,100,yes`).rows[0]!.ok).toBe(true); // a real leap day (in the past: future sales are refused)
   });
 
   it('refuses a file whose quotes are broken', () => {
@@ -96,5 +96,25 @@ describe('a file that looks fine but is not', () => {
     const { rows } = salesFromCsv('eventId,channel,occurredAt,store\nA1,store,2026-10-07,Pune, FC Road');
     expect(rows[0]!.ok).toBe(false);
     expect(rows[0]!.error).toContain('put values containing commas in quotes');
+  });
+});
+
+describe("today's date without a time", () => {
+  const head = 'eventId,channel,occurredAt,value\n';
+  it('before noon India time: uses the current time, so the sale is not refused as in the future', () => {
+    const now = new Date('2026-11-13T03:00:00Z'); // 08:30 in India
+    const { rows } = salesFromCsv(`${head}T1,store,2026-11-13,100`, '+05:30', 1000, now);
+    expect(rows[0]).toMatchObject({ ok: true, sale: { occurredAt: now } });
+  });
+  it('after noon, and on earlier days: noon India time, as before', () => {
+    const now = new Date('2026-11-13T10:00:00Z'); // 15:30 in India
+    const today = salesFromCsv(`${head}T1,store,2026-11-13,100`, '+05:30', 1000, now).rows[0];
+    expect(today?.sale?.occurredAt).toEqual(new Date('2026-11-13T12:00:00+05:30'));
+    const earlier = salesFromCsv(`${head}T1,store,2026-11-10,100`, '+05:30', 1000, now).rows[0];
+    expect(earlier?.sale?.occurredAt).toEqual(new Date('2026-11-10T12:00:00+05:30'));
+  });
+  it('a later day is still refused', () => {
+    const now = new Date('2026-11-13T10:00:00Z');
+    expect(salesFromCsv(`${head}T1,store,2026-11-14,100`, '+05:30', 1000, now).rows[0]?.ok).toBe(false);
   });
 });
