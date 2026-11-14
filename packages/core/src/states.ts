@@ -32,25 +32,38 @@ const CODES = { IN: new Set(Object.values(IN)), US: new Set(Object.values(US)) }
  * without it both are tried, India first.
  */
 export function stateCode(raw: string | null | undefined, country?: string | null): string | null {
+  return findState(raw, country)?.code ?? null;
+}
+
+/** Which table recognised the state, and its code. */
+function findState(raw: string | null | undefined, country?: string | null): { country: 'IN' | 'US'; code: string } | null {
   const s = (raw ?? '').trim();
   if (!s) return null;
   const order = country === 'US' ? (['US'] as const) : country === 'IN' ? (['IN'] as const) : (['IN', 'US'] as const);
   for (const c of order) {
     const named = BY_NAME[c].get(key(s));
-    if (named) return named;
+    if (named) return { country: c, code: named };
     const upper = s.toUpperCase();
-    if (/^[A-Za-z]{2}$/.test(s) && CODES[c].has(upper)) return upper;
+    if (/^[A-Za-z]{2}$/.test(s) && CODES[c].has(upper)) return { country: c, code: upper };
   }
   return null;
 }
 
+/** One full name per Indian state code (the first name listed for it), so "MH" and "Maharashtra" hash the same. */
+const IN_NAME_BY_CODE = new Map<string, string>();
+for (const [name, code] of Object.entries(IN)) if (!IN_NAME_BY_CODE.has(code)) IN_NAME_BY_CODE.set(code, name);
+
+const plainPlace = (raw: string) => raw.normalize('NFKC').trim().toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+
 /**
- * Meta: the code in lowercase when the state is recognised (what Meta expects for US states, and the natural short
- * form elsewhere); otherwise the text with spaces and punctuation removed. VERIFY Meta's rule for Indian states.
+ * Meta's rule (customer information parameters, checked Nov 2026): US states as the two-letter code in lowercase
+ * ("ca"); outside the US, the name in lowercase with no punctuation, special characters or spaces ("maharashtra").
+ * A recognised Indian state is always hashed by its full name, whether it came as "MH" or "Maharashtra".
  */
 export function hashStateForMeta(raw: string | null | undefined, country?: string | null): string | null {
-  const code = stateCode(raw, country);
-  if (code) return sha256Hex(code.toLowerCase());
-  const s = (raw ?? '').normalize('NFKC').trim().toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  const found = findState(raw, country);
+  if (found?.country === 'US') return sha256Hex(found.code.toLowerCase());
+  if (found?.country === 'IN') return sha256Hex(plainPlace(IN_NAME_BY_CODE.get(found.code)!));
+  const s = plainPlace(raw ?? '');
   return s ? sha256Hex(s) : null;
 }

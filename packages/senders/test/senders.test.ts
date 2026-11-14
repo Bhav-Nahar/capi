@@ -47,7 +47,7 @@ describe('buildMetaEvent', () => {
       event_id: 'deal-1',
       action_source: 'physical_store',
       user_data: { ph: ['mp'], em: ['me'] },
-      custom_data: { value: 85000, currency: 'INR' },
+      custom_data: { value: 85000, currency: 'INR', order_id: 'deal-1' },
     });
   });
 
@@ -63,9 +63,9 @@ describe('buildMetaEvent', () => {
     expect(e).toMatchObject({ action_source: 'business_messaging', messaging_channel: 'whatsapp', user_data: { ctwa_clid: 'C1' } });
   });
 
-  it('omits custom_data without a value and returns null with nothing to match on', () => {
+  it('returns null without a value or currency, and with nothing to match on', () => {
     const { value: _v, currency: _c, ...noValue } = sale();
-    expect(buildMetaEvent(ctx(noValue as SaleRecord))?.custom_data).toBeUndefined();
+    expect(buildMetaEvent(ctx(noValue as SaleRecord))).toBeNull();
     expect(buildMetaEvent(ctx(sale({ hashes: {} })))).toBeNull();
   });
 });
@@ -77,7 +77,10 @@ describe('sendMeta', () => {
     expect(res).toEqual({ outcome: 'sent', response: 'events_received=1 trace=TRACE1 dataset_id=999 test_event_code=TEST1' });
 
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
-    expect(url).toBe('https://graph.facebook.com/v99.0/999/events?access_token=TOKEN');
+    // The token travels in the Authorization header, never in the URL (URLs end up in logs).
+    expect(url).toBe('https://graph.facebook.com/v99.0/999/events');
+    expect(url).not.toContain('TOKEN');
+    expect((init.headers as Record<string, string>).authorization).toBe('Bearer TOKEN');
     const body = JSON.parse(init.body as string);
     expect(body.test_event_code).toBe('TEST1');
     expect(body.data).toHaveLength(1);
@@ -146,13 +149,12 @@ describe('buildGoogleEvent / buildGoogleRequest (Data Manager API)', () => {
     expect(source('web_lead')).toBe('WEB');
   });
 
-  it('no click ID: matches on hashed identifiers only; no value: no currency either', () => {
-    const { value: _v, currency: _c, ...noValue } = sale();
-    const e = buildGoogleEvent(ctx(noValue as SaleRecord));
+  it('no click ID: matches on hashed identifiers only; a Purchase without a value is not built', () => {
+    const e = buildGoogleEvent(ctx());
     expect(e?.adIdentifiers).toBeUndefined();
     expect(e?.userData?.userIdentifiers).toHaveLength(2);
-    expect(e?.conversionValue).toBeUndefined();
-    expect(e?.currency).toBeUndefined();
+    const { value: _v, currency: _c, ...noValue } = sale();
+    expect(buildGoogleEvent(ctx(noValue as SaleRecord))).toBeNull();
   });
 
   it('gclid wins over gbraid and wbraid; braid-only clicks are sent without user data (conservative, VERIFY)', () => {

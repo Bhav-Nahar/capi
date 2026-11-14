@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { FieldValue, type DocumentData, type DocumentReference, type Firestore } from '@google-cloud/firestore';
-import type { Channel, Destination } from '@datahash/core';
+import type { AdClick, Channel, Destination } from '@datahash/core';
 import type { PersonHashes } from './types';
+import { summarizeDashboard, type Dashboard, type DashboardRow } from './dashboard';
 
 /**
  * pending  - waiting to be sent
@@ -31,6 +32,8 @@ export interface SaleRecord {
    * find and stop this sale even when the customer never identified on the website.
    */
   identityKeys?: string[];
+  /** The customer's Google / Meta ad clicks before the sale, oldest first, for the dashboard's attribution (reporting only). */
+  adClicks?: AdClick[];
 }
 
 export interface DeliveryDraft {
@@ -441,6 +444,15 @@ export class SalesRepo {
       }
     }
     return stats;
+  }
+
+  /** Everything the dashboard shows for sales created since `since` (see summarizeDashboard). */
+  async dashboard(since: Date, until: Date = new Date(), opts: { offsetMinutes?: number; cap?: number } = {}): Promise<Dashboard> {
+    const snap = await this.sales.where('createdAt', '>=', since).orderBy('createdAt', 'desc').limit(opts.cap ?? 5000).get();
+    const rows: DashboardRow[] = await Promise.all(
+      snap.docs.map(async (doc) => ({ saleKey: doc.id, sale: toSale(doc.data()), deliveries: await this.getDeliveries(doc.id) })),
+    );
+    return summarizeDashboard(rows, { since, until, ...(opts.offsetMinutes !== undefined ? { offsetMinutes: opts.offsetMinutes } : {}) });
   }
 
   /** Raw webhook / sync trace for debugging. Callers must redact phone and email first. Kept 30 days. */

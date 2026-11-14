@@ -69,7 +69,9 @@ const clean = (raw: string | null | undefined): string | null => {
   return s || null;
 };
 
-const TITLES = new Set(['mr', 'mrs', 'ms', 'miss', 'dr', 'prof']);
+// Indian forms included: "Smt Priya" must hash as "priya". "sri" and "shree" are left out on purpose: they are as
+// often part of a name ("Sri Devi", "Shree Lakshmi") as a title, and removing a real name part spoils the match.
+const TITLES = new Set(['mr', 'mrs', 'ms', 'miss', 'dr', 'prof', 'shri', 'smt', 'shrimati', 'srimati', 'kumari']);
 const SUFFIXES = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
 
 /** Lowercase, no punctuation or digits, single spaces. Shared by Meta and Google (both say "no punctuation"). */
@@ -83,9 +85,12 @@ function plainName(raw: string | null | undefined, drop?: { titles?: boolean; su
   return words.join(' ') || null;
 }
 
-/** Meta: lowercase, no punctuation. A multi-word name keeps single spaces. */
-export function hashNameForMeta(raw: string | null | undefined): string | null {
-  const s = plainName(raw);
+/**
+ * Meta: lowercase, no punctuation. A multi-word name keeps single spaces. A title written before a first name ("Smt",
+ * "Mr") is dropped, the same as for Google, so the same customer hashes the same on both platforms and in every source.
+ */
+export function hashNameForMeta(raw: string | null | undefined, part: 'given' | 'family' = 'given'): string | null {
+  const s = plainName(raw, part === 'given' ? { titles: true } : undefined);
   return s ? sha256Hex(s) : null;
 }
 
@@ -134,6 +139,56 @@ export function normalizeCountry(raw: string | null | undefined): string | null 
     }
   }
   return regionByName.get(s.toLowerCase()) ?? null;
+}
+
+/**
+ * Date of birth for Meta: YYYYMMDD, hashed. Only an ISO date (1997-02-16) is accepted, because 02/03/1997 means a
+ * different day in India and the US. The year must be 1900 or later and the date not in the future (Meta's rule).
+ */
+export function hashDobForMeta(raw: string | null | undefined, now: Date = new Date()): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((raw ?? '').trim());
+  if (!m) return null;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const day = new Date(Date.UTC(y, mo - 1, d));
+  if (day.getUTCFullYear() !== y || day.getUTCMonth() !== mo - 1 || day.getUTCDate() !== d) return null;
+  if (y < 1900 || day.getTime() > now.getTime()) return null;
+  return sha256Hex(`${m[1]}${m[2]}${m[3]}`);
+}
+
+/** Gender for Meta: "f" or "m", hashed. Anything else is left out rather than guessed. */
+export function hashGenderForMeta(raw: string | null | undefined): string | null {
+  const s = (raw ?? '').trim().toLowerCase();
+  const g = s === 'f' || s === 'female' ? 'f' : s === 'm' || s === 'male' ? 'm' : null;
+  return g ? sha256Hex(g) : null;
+}
+
+/**
+ * A brand's rule for fake emails its own systems make up (for example "9876543210@brand.com" for a customer who signed
+ * up with a phone number only). Such an email says nothing about the customer, so it is dropped before matching or
+ * sending. Off unless the brand sets it.
+ */
+export interface PlaceholderEmailRule {
+  /** Any email whose part before the @ is only digits, at one of these domains ("brand.com"), is made up. */
+  domains: string[];
+  /** Also treat "<the customer's own phone number>@any-domain" as made up. */
+  ownPhone: boolean;
+}
+
+/** Is this one of the brand's made-up emails? `phone` is the same customer's phone, for the `ownPhone` rule. */
+export function isPlaceholderEmail(
+  email: string | null | undefined,
+  phone: string | null | undefined,
+  rule: PlaceholderEmailRule | undefined,
+  defaultCountry: CountryCode = 'IN',
+): boolean {
+  if (!rule) return false;
+  const e = normalizeEmail(email);
+  const m = e ? /^\+?(\d{7,15})@(.+)$/.exec(e) : null;
+  if (!m) return false;
+  if (rule.domains.map((d) => d.trim().toLowerCase()).includes(m[2]!)) return true;
+  if (!rule.ownPhone) return false;
+  const own = normalizePhone(phone, defaultCountry);
+  return own !== null && normalizePhone(m[1], defaultCountry) === own;
 }
 
 /** Meta wants the country as a lowercase two-letter code, hashed. */

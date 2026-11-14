@@ -8,6 +8,7 @@ import { useApi } from '@/lib/useApi';
 import type { Meta, TenantView } from '@/lib/types';
 import { AdAccounts } from '@/tabs/AdAccounts';
 import { Crm } from '@/tabs/Crm';
+import { Dashboard } from '@/tabs/Dashboard';
 import { Overview } from '@/tabs/Overview';
 import { Sales } from '@/tabs/Sales';
 import { Settings } from '@/tabs/Settings';
@@ -15,7 +16,8 @@ import { Website } from '@/tabs/Website';
 import type { TabProps } from '@/tabs/types';
 
 const TABS: Array<[string, string, (p: TabProps) => React.ReactElement]> = [
-  ['overview', 'Overview', Overview],
+  ['dashboard', 'Dashboard', Dashboard],
+  ['overview', 'Setup', Overview],
   ['connections', 'Ad accounts', AdAccounts],
   ['website', 'Website', Website],
   ['crm', 'CRM', Crm],
@@ -27,7 +29,7 @@ export function BrandPage() {
   const { ready, signedIn } = useAuth();
   const params = useSearchParams();
   const id = params.get('id');
-  const tab = TABS.find(([key]) => key === params.get('tab'))?.[0] ?? 'overview';
+  const tab = TABS.find(([key]) => key === params.get('tab'))?.[0] ?? 'dashboard';
   const ok = ready && signedIn && Boolean(id);
   const view = useApi<TenantView>(ok ? `/tenants/${encodeURIComponent(id!)}` : null);
   const meta = useApi<Meta>(ok ? '/meta' : null);
@@ -61,11 +63,19 @@ export function BrandPage() {
         </div>
       </div>
 
-      {view.data.sending && !view.data.sending.allowed && (
+      {tab !== 'dashboard' && view.data.sending && !view.data.sending.allowed && (
         <div role="status" className="rounded-xl bg-warn-bg px-4 py-3 text-sm text-warn">{view.data.sending.reason ?? 'Sending is switched off on this server.'}</div>
       )}
 
-      {view.data.connections.find((c) => c.kind === 'meta')?.testEventCode && (
+      {tab === 'dashboard' && view.data.connections.find((c) => c.kind === 'meta')?.testEventCode && (
+        // Quieter on the dashboard (it is what a client looks at), but still always visible.
+        <p role="status" className="inline-flex flex-wrap items-center gap-x-1.5 rounded-lg bg-warn-bg px-3 py-1.5 text-xs text-warn">
+          <strong className="font-semibold">Test mode.</strong> Meta gets test code {view.data.connections.find((c) => c.kind === 'meta')!.testEventCode}: not live conversions.
+          <Link href={href('connections')} className="underline">Change</Link>
+        </p>
+      )}
+
+      {tab !== 'dashboard' && view.data.connections.find((c) => c.kind === 'meta')?.testEventCode && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-warn-bg px-4 py-3 text-sm text-warn">
           <span>
             <strong className="font-semibold">Test mode.</strong> Sales for Meta are sent with the test event code ( {view.data.connections.find((c) => c.kind === 'meta')!.testEventCode}). Meta treats them as tests, not live conversions. Remove the test code when you are done testing.
@@ -76,7 +86,7 @@ export function BrandPage() {
 
       <nav aria-label="Brand sections" className="flex flex-wrap gap-1 border-b border-border">
         {TABS.map(([key, label]) => (
-          <Link key={key} href={href(key)} aria-current={tab === key ? 'page' : undefined} className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${tab === key ? 'border-accent text-text' : 'border-transparent text-muted hover:text-text'}`}>{label}</Link>
+          <Link key={key} href={href(key)} aria-current={tab === key ? 'page' : undefined} className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${tab === key ? 'border-accent text-accent' : 'border-transparent text-muted hover:text-text'}`}>{label}</Link>
         ))}
       </nav>
 

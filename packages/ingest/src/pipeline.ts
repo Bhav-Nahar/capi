@@ -2,6 +2,8 @@ import {
   evaluateDelivery,
   hashEmailForGoogle,
   hashCountryForMeta,
+  hashDobForMeta,
+  hashGenderForMeta,
   hashEmailForMeta,
   hashExternalId,
   hashNameForGoogle,
@@ -14,7 +16,9 @@ import {
   normalizeCountry,
   normalizePostalCode,
   identityKeyForEmail,
+  isPlaceholderEmail,
   identityKeyForPhone,
+  adClicksBefore,
   type Destination,
 } from '@datahash/core';
 import type { DeliveryDraft, PersonHashes, SalesRepo, Store } from '@datahash/store';
@@ -52,12 +56,14 @@ function saleHashes(sale: IncomingSale, defaultCountry: IngestTenant['defaultCou
     if (value) h[key] = value;
   };
   set('metaFirstName', hashNameForMeta(sale.firstName));
-  set('metaLastName', hashNameForMeta(sale.lastName));
+  set('metaLastName', hashNameForMeta(sale.lastName, 'family'));
   set('metaCity', hashPlaceForMeta(sale.city));
   set('metaState', hashStateForMeta(sale.state, country));
   set('metaZip', hashPostalCodeForMeta(sale.postalCode));
   set('metaCountry', hashCountryForMeta(country));
   set('metaExternalId', hashExternalId(sale.customerId));
+  set('metaDob', hashDobForMeta(sale.dateOfBirth));
+  set('metaGender', hashGenderForMeta(sale.gender));
   set('googleFirstName', hashNameForGoogle(sale.firstName));
   set('googleLastName', hashNameForGoogle(sale.lastName, 'family'));
   // Google takes an address's country and postal code as they are (not hashed).
@@ -70,9 +76,14 @@ function saleHashes(sale: IncomingSale, defaultCountry: IngestTenant['defaultCou
  * Turn one normalised sale into a stored sale plus a pending/skipped delivery per destination.
  * Sending itself happens later (Part 4).
  */
-export async function processSale(sale: IncomingSale, tenant: IngestTenant, deps: PipelineDeps): Promise<ProcessResult> {
+export async function processSale(incoming: IncomingSale, tenant: IngestTenant, deps: PipelineDeps): Promise<ProcessResult> {
   const now = deps.now ? deps.now() : new Date();
   const country = tenant.defaultCountry;
+
+  // A made-up email (see the brand's placeholderEmails rule) is dropped before it is used for anything.
+  const { email: givenEmail, ...rest } = incoming;
+  const sale: IncomingSale =
+    givenEmail && !isPlaceholderEmail(givenEmail, incoming.phone, tenant.placeholderEmails, country) ? { ...rest, email: givenEmail } : rest;
 
   const contact = { phone: sale.phone ?? null, email: sale.email ?? null, defaultCountry: country };
   const found = sale.phone || sale.email ? await deps.store.lookupForSale(contact) : null;
@@ -123,6 +134,7 @@ export async function processSale(sale: IncomingSale, tenant: IngestTenant, deps
     };
   });
 
+  const adClicks = found ? adClicksBefore(found.touches, sale.occurredAt) : undefined;
   const { saleKey, duplicate } = await deps.sales.recordSale(
     {
       source: sale.source,
@@ -137,6 +149,8 @@ export async function processSale(sale: IncomingSale, tenant: IngestTenant, deps
       hashes,
       consentAds,
       ...(identityKeys.length ? { identityKeys } : {}),
+      // Not kept for a customer who withdrew consent.
+      ...(adClicks && !withdrawn ? { adClicks } : {}),
     },
     drafts,
     now,

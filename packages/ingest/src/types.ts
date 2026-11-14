@@ -23,6 +23,10 @@ export interface IncomingSale {
   country?: string;
   /** The brand's own ID for this customer (the CRM contact ID). */
   customerId?: string;
+  /** Date of birth as an ISO date (1997-02-16). Hashed for Meta; anything else is ignored. */
+  dateOfBirth?: string;
+  /** "f"/"female" or "m"/"male". Hashed for Meta; anything else is ignored. */
+  gender?: string;
   /** Consent captured by the source (e.g. a CRM field). undefined = the source did not say. */
   consent?: boolean;
 }
@@ -34,7 +38,11 @@ export type AdapterRejection =
   | 'invalid_amount'
   | 'invalid_date'
   | 'invalid_consent'
-  | 'unknown_channel';
+  | 'unknown_channel'
+  /** Only Purchase is supported for now. */
+  | 'unsupported_event'
+  /** A Purchase needs a value: Meta refuses a Purchase without value and currency. */
+  | 'missing_value';
 
 export type AdapterResult =
   | { ok: true; sale: IncomingSale }
@@ -43,7 +51,7 @@ export type AdapterResult =
 /** The parts of a brand's settings the ingestion pipeline needs. */
 export type IngestTenant = Pick<
   TenantConfig,
-  'tenantId' | 'consentPolicy' | 'allowedChannels' | 'destinations' | 'defaultCountry' | 'sources'
+  'tenantId' | 'consentPolicy' | 'allowedChannels' | 'destinations' | 'defaultCountry' | 'sources' | 'placeholderEmails'
 > & {
   /** How long customer data is kept; the server uses it when it opens the store for this brand. */
   retentionDays?: number;

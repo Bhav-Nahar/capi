@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
-import type { Channel, CountryCode, Destination, TenantConfig, ZohoMapping } from '@datahash/core';
+import type { Channel, CountryCode, Destination, PlaceholderEmailRule, TenantConfig, ZohoMapping } from '@datahash/core';
 import {
   DEFAULT_ZOHO_MAPPING,
   IMPORT_COLUMNS,
@@ -239,6 +239,21 @@ export function validateZohoMapping(v: unknown): ZohoMapping | string {
   return Object.fromEntries(keep.filter((k) => v[k] !== undefined).map((k) => [k, v[k]])) as unknown as ZohoMapping;
 }
 
+/** { domains: ["brand.com"], ownPhone: true }. Both parts are required so a change never half-applies. */
+function placeholderEmailRule(v: unknown): { rule: PlaceholderEmailRule } | { error: string } {
+  const error = 'placeholderEmails must be { domains: ["brand.com", ...], ownPhone: true or false }';
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return { error };
+  const { domains, ownPhone } = v as Record<string, unknown>;
+  if (typeof ownPhone !== 'boolean' || !Array.isArray(domains) || domains.length > 20) return { error };
+  const clean: string[] = [];
+  for (const d of domains) {
+    const host = typeof d === 'string' ? d.trim().toLowerCase().replace(/^@/, '') : '';
+    if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(host)) return { error: `"${String(d).slice(0, 60)}" is not a domain like brand.com` };
+    if (!clean.includes(host)) clean.push(host);
+  }
+  return { rule: { domains: clean, ownPhone } };
+}
+
 function tenantSettings(body: Record<string, unknown>): { patch: Partial<TenantConfig>; error?: string } {
   const patch: Partial<TenantConfig> = {};
   if (body.name !== undefined) {
@@ -271,6 +286,11 @@ function tenantSettings(body: Record<string, unknown>): { patch: Partial<TenantC
     const n = body.retentionDays;
     if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 365) return { patch, error: 'retentionDays must be a whole number from 1 to 365' };
     patch.retentionDays = n;
+  }
+  if (body.placeholderEmails !== undefined) {
+    const parsed = placeholderEmailRule(body.placeholderEmails);
+    if ('error' in parsed) return { patch, error: parsed.error };
+    patch.placeholderEmails = parsed.rule;
   }
   return { patch };
 }
@@ -535,6 +555,17 @@ export async function handleAdmin(req: AdminRequest, deps: AdminDeps): Promise<A
       if (!deps.previewFor) return fail(501, 'not_supported');
       const p = await deps.previewFor(id, preview[1]!, preview[2] as 'meta' | 'google_ads');
       return p ? ok(p) : fail(404, 'not_found', 'No such delivery.');
+    }
+
+    if (rest === '/dashboard' && method === 'GET') {
+      const days = Math.min(Math.max(Number(req.query.get('days') ?? 30) || 30, 1), 90);
+      const tenant = (await deps.registry.getTenant(id))!;
+      // Days are the brand's calendar days. Fixed offsets: good enough for a daily chart (US uses Eastern).
+      const offsetMinutes = ({ IN: 330, AE: 240, SG: 480, GB: 0, US: -300 } as const)[tenant.defaultCountry] ?? 330;
+      // From the start of the first day, so "last 7 days" is 7 whole days ending today.
+      const startOfToday = Date.parse(`${new Date(now.getTime() + offsetMinutes * 60_000).toISOString().slice(0, 10)}T00:00:00Z`) - offsetMinutes * 60_000;
+      const since = new Date(startOfToday - (days - 1) * 86_400_000);
+      return ok(await deps.salesFor(id).dashboard(since, now, { offsetMinutes }));
     }
 
     if (rest === '/stats' && method === 'GET') {

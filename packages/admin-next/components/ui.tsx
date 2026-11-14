@@ -8,13 +8,14 @@ export function Card({ className, children }: { className?: string; children: Re
 }
 
 export function Button({ variant = 'default', className, ...p }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger' }) {
+  // A disabled main button turns plain grey rather than faded yellow: yellow only ever means "you can do this now".
   const look =
     variant === 'primary'
-      ? 'bg-accent text-accent-contrast border-transparent hover:opacity-90'
+      ? 'bg-accent text-accent-contrast border-transparent font-semibold hover:bg-accent-hover disabled:bg-surface-2 disabled:text-muted disabled:border-border'
       : variant === 'danger'
-        ? 'bg-bad-bg text-bad border-transparent hover:opacity-90'
-        : 'bg-surface text-text border-border hover:bg-surface-2';
-  return <button type="button" {...p} className={cx('inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-50', look, className)} />;
+        ? 'bg-bad-bg text-bad border-transparent hover:opacity-90 disabled:opacity-50'
+        : 'bg-surface text-text border-border hover:bg-surface-2 disabled:opacity-50';
+  return <button type="button" {...p} className={cx('inline-flex h-9 items-center justify-center gap-2 rounded-lg border px-3.5 text-sm font-medium transition disabled:cursor-not-allowed', look, className)} />;
 }
 
 export function Badge({ tone = 'neutral', children }: { tone?: 'neutral' | 'ok' | 'warn' | 'bad'; children: ReactNode }) {

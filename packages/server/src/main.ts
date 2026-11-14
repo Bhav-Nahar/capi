@@ -167,6 +167,7 @@ const server = createHttpServer({
       consentMode: found.tenant.consentPolicy.mode,
       retentionDays: found.tenant.retentionDays,
       defaultCountry: found.tenant.defaultCountry,
+      ...(found.tenant.placeholderEmails ? { placeholderEmails: found.tenant.placeholderEmails } : {}),
       ...(found.site.trackingHost ? { trackingHost: found.site.trackingHost } : {}),
     };
   },

@@ -26,9 +26,12 @@ export function matchSummary(destination: 'meta' | 'google_ads', ctx: SendContex
     check('Meta click ID', Boolean(t?.fbc || t?.fbclid || t?.ctwaClid));
     check('name', Boolean(h.metaFirstName && h.metaLastName));
     check('city', Boolean(h.metaCity));
+    check('state', Boolean(h.metaState));
     check('postal code', Boolean(h.metaZip));
     check('country', Boolean(h.metaCountry));
     check('customer ID', Boolean(h.metaExternalId));
+    check('date of birth', Boolean(h.metaDob));
+    check('gender', Boolean(h.metaGender));
     check('browser ID (fbp)', Boolean(h.fbp));
   } else {
     check('phone', Boolean(h.googlePhone));
