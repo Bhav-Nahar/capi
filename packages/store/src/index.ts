@@ -5,3 +5,4 @@ export * from './tenants';
 export * from './secrets';
 export * from './connections';
 export * from './control';
+export * from './dashboard';

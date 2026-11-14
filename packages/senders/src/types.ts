@@ -9,6 +9,22 @@ export interface SendContext {
   touch: Touch | null;
 }
 
+/** A sale dated further ahead than this is refused: both platforms reject future events. Allows a little clock drift. */
+export const MAX_FUTURE_MS = 5 * 60 * 1000;
+
+/**
+ * Why this sale cannot be sent as a Purchase, or null if it can. Only Purchase is supported for now; Meta requires a
+ * value and currency on every Purchase, and a Purchase without a value teaches Google's value bidding nothing.
+ * Checked by both senders before anything leaves the server.
+ */
+export function purchaseProblem(sale: SendContext['sale'], now: Date = new Date()): string | null {
+  if (sale.eventName !== 'Purchase') return `unsupported_event: only Purchase is sent (got ${sale.eventName})`;
+  if (sale.value === undefined || !Number.isFinite(sale.value) || sale.value < 0) return 'missing_value: a Purchase needs a value';
+  if (!sale.currency || !/^[A-Z]{3}$/.test(sale.currency)) return 'missing_currency: a Purchase needs a 3-letter currency code';
+  if (sale.occurredAt.getTime() > now.getTime() + MAX_FUTURE_MS) return 'event_time_in_future: the sale is dated in the future';
+  return null;
+}
+
 export type SendResult =
   /** `requestId` is the platform's ID for an accepted request whose processing result can be looked up later. */
   | { outcome: 'sent'; response: string; requestId?: string }

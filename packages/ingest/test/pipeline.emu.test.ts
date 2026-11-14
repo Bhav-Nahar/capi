@@ -95,7 +95,7 @@ describe.skipIf(!emulator)('processSale (Firestore emulator)', () => {
     );
     const saved = await sales.getSale(result.saleKey);
     expect(saved?.hashes).toMatchObject({ googleRegion: 'IN', googlePostal: '411001' });
-    expect(saved?.hashes.metaState).toBe(sha256Hex('mh'));
+    expect(saved?.hashes.metaState).toBe(sha256Hex('maharashtra')); // Meta: full name outside the US
     for (const k of ['metaFirstName', 'metaLastName', 'metaCity', 'metaZip', 'metaCountry', 'metaExternalId', 'googleFirstName', 'googleLastName'] as const) {
       expect(saved?.hashes[k]).toMatch(/^[0-9a-f]{64}$/);
     }

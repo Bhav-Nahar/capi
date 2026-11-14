@@ -118,7 +118,7 @@ describe('handleWebhook', () => {
 
   it('the generic endpoint takes the standard JSON', async () => {
     const { deps, process } = setup();
-    const body = JSON.stringify({ eventId: 'w1', channel: 'whatsapp', occurredAt: '2026-10-07T10:00:00+05:30', phone: '9876543210' });
+    const body = JSON.stringify({ eventId: 'w1', channel: 'whatsapp', occurredAt: '2026-10-07T10:00:00+05:30', value: 100, phone: '9876543210' });
     const res = await handleWebhook(req({ source: 'generic', body }), deps);
     expect(res.status).toBe(200);
     expect(process).toHaveBeenCalledTimes(1);

@@ -150,3 +150,31 @@ describe('withdrawal of consent', () => {
     expect(withdraw).not.toHaveBeenCalled();
   });
 });
+
+describe("the brand's made-up emails", () => {
+  const site: SiteLookup = {
+    tenantId: 'brand-c', origins: [], consentMode: 'opt_out', retentionDays: 90, defaultCountry: 'IN',
+    placeholderEmails: { domains: ['brand-c.com'], ownPhone: true },
+  };
+  const deps = (identify: ReturnType<typeof vi.fn>) => ({ findSite: async () => site, storeFor: () => ({ identify }), now: () => NOW });
+
+  it('are kept out of the person record; the phone still identifies the customer', async () => {
+    const identify = vi.fn(async (_input: IdentifyInput): Promise<IdentifyResult> => ({ status: 'ok', personId: 'p1', created: true, merged: false, touchesWritten: 0 }));
+    await handleIdentify({ body: { key: 'k', phone: '9876543210', email: '9876543210@gmail.com' } }, deps(identify));
+    expect(identify.mock.calls[0]![0]).toMatchObject({ phone: '9876543210' });
+    expect(identify.mock.calls[0]![0]).not.toHaveProperty('email');
+  });
+
+  it('alone are not enough to store anyone', async () => {
+    const identify = vi.fn();
+    const res = await handleIdentify({ body: { key: 'k', email: '9876543210@brand-c.com' } }, deps(identify));
+    expect(res).toEqual({ status: 202, body: { status: 'skipped', reason: 'placeholder_email' } });
+    expect(identify).not.toHaveBeenCalled();
+  });
+
+  it('a real email is kept', async () => {
+    const identify = vi.fn(async (_input: IdentifyInput): Promise<IdentifyResult> => ({ status: 'ok', personId: 'p1', created: true, merged: false, touchesWritten: 0 }));
+    await handleIdentify({ body: { key: 'k', phone: '9876543210', email: 'priya@gmail.com' } }, deps(identify));
+    expect(identify.mock.calls[0]![0]).toMatchObject({ email: 'priya@gmail.com' });
+  });
+});

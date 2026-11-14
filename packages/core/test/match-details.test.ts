@@ -61,8 +61,15 @@ describe('customer details for matching', () => {
     expect(stateCode('Georgia', 'IN')).toBeNull();
     expect(stateCode('zz')).toBeNull();
     expect(stateCode('Atlantis')).toBeNull();
-    expect(hashStateForMeta('Maharashtra', 'IN')).toBe(sha256Hex('mh'));
-    expect(hashStateForMeta('MH')).toBe(sha256Hex('mh'));
+    // Meta: outside the US the full name (no spaces or punctuation); a US state as its lowercase code.
+    expect(hashStateForMeta('Maharashtra', 'IN')).toBe(sha256Hex('maharashtra'));
+    expect(hashStateForMeta('MH')).toBe(sha256Hex('maharashtra'));
+    expect(hashStateForMeta('mh', 'IN')).toBe(sha256Hex('maharashtra'));
+    expect(hashStateForMeta('Tamil Nadu')).toBe(sha256Hex('tamilnadu'));
+    expect(hashStateForMeta('Jammu & Kashmir')).toBe(sha256Hex('jammuandkashmir'));
+    expect(hashStateForMeta('New Delhi')).toBe(sha256Hex('delhi'));
+    expect(hashStateForMeta('Texas', 'US')).toBe(sha256Hex('tx'));
+    expect(hashStateForMeta('CA')).toBe(sha256Hex('ca'));
     expect(hashStateForMeta('Some Region')).toBe(sha256Hex('someregion'));
     expect(hashStateForMeta('')).toBeNull();
   });

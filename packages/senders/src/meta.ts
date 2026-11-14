@@ -1,11 +1,14 @@
 import { buildFbc, type Channel } from '@datahash/core';
 import type { MetaSettings } from '@datahash/store';
-import { timedFetch, type HttpOptions, type SendContext, type SendResult } from './types';
+import { purchaseProblem, timedFetch, type HttpOptions, type SendContext, type SendResult } from './types';
 
 /**
- * Graph API version. VERIFY the current version and keep it configurable.
+ * Graph API version. v26.0 (released 29 Jul 2026) had no expiry date announced when this was set in Nov 2026; v20.0
+ * expired on 24 Sep 2026 and v21.0 expires on 21 Jan 2027. Check https://developers.facebook.com/docs/graph-api/changelog/versions/
+ * before each upgrade. Override with `apiVersion` (META_API_VERSION on the server).
  */
-export const DEFAULT_META_API_VERSION = 'v21.0';
+export const DEFAULT_META_API_VERSION = 'v26.0';
+
 
 /** Meta action_source by channel. VERIFY the allowed values and rules for each in Meta's docs. */
 const ACTION_SOURCE: Record<Channel, string> = {
@@ -31,14 +34,20 @@ export interface MetaEvent {
     zp?: string[];
     country?: string[];
     external_id?: string[];
+    db?: string[];
+    ge?: string[];
     fbc?: string;
     fbp?: string;
     ctwa_clid?: string;
   };
-  custom_data?: { value: number; currency: string };
+  custom_data: { value: number; currency: string; order_id: string };
 }
 
+/** Why this sale cannot be sent to Meta as it is, or null if it can (the shared Purchase rules). */
+export const metaSaleProblem = purchaseProblem;
+
 export function buildMetaEvent({ sale, touch }: SendContext): MetaEvent | null {
+  if (sale.value === undefined || !sale.currency) return null;
   const user_data: MetaEvent['user_data'] = {};
   if (sale.hashes.metaPhone) user_data.ph = [sale.hashes.metaPhone];
   if (sale.hashes.metaEmail) user_data.em = [sale.hashes.metaEmail];
@@ -51,6 +60,8 @@ export function buildMetaEvent({ sale, touch }: SendContext): MetaEvent | null {
   if (h.metaZip) user_data.zp = [h.metaZip];
   if (h.metaCountry) user_data.country = [h.metaCountry];
   if (h.metaExternalId) user_data.external_id = [h.metaExternalId];
+  if (h.metaDob) user_data.db = [h.metaDob];
+  if (h.metaGender) user_data.ge = [h.metaGender];
   if (h.fbp) user_data.fbp = h.fbp;
   if (touch?.fbc) user_data.fbc = touch.fbc;
   else if (touch?.fbclid) user_data.fbc = buildFbc(touch.fbclid, touch.clickedAt.getTime());
@@ -65,14 +76,17 @@ export function buildMetaEvent({ sale, touch }: SendContext): MetaEvent | null {
     event_id: sale.eventId,
     action_source: ACTION_SOURCE[sale.channel],
     user_data,
+    // order_id: the receipt / order number. Meta uses it to remove duplicates and shows it in reporting.
+    custom_data: { value: sale.value, currency: sale.currency, order_id: sale.eventId },
   };
   if (sale.channel === 'whatsapp') event.messaging_channel = 'whatsapp';
-  if (sale.value !== undefined) event.custom_data = { value: sale.value, currency: sale.currency ?? 'INR' };
   return event;
 }
 
 interface MetaError {
   message?: string;
+  error_user_title?: string;
+  error_user_msg?: string;
   code?: number;
   error_subcode?: number;
   is_transient?: boolean;
@@ -85,14 +99,15 @@ const AUTH_CODES = new Set([102, 190]);
 export async function sendMeta(
   ctx: SendContext,
   connection: { settings: MetaSettings; token: string },
-  opts: HttpOptions & { apiVersion?: string } = {},
+  opts: HttpOptions & { apiVersion?: string; now?: () => Date } = {},
 ): Promise<SendResult> {
+  const problem = metaSaleProblem(ctx.sale, opts.now ? opts.now() : new Date());
+  if (problem) return { outcome: 'failed', error: problem };
   const event = buildMetaEvent(ctx);
   if (!event) return { outcome: 'failed', error: 'no_user_data: no hashed phone, email or click ID to match on' };
 
-  const url =
-    `https://graph.facebook.com/${opts.apiVersion ?? DEFAULT_META_API_VERSION}/${connection.settings.datasetId}/events` +
-    `?access_token=${encodeURIComponent(connection.token)}`;
+  // The token goes in the Authorization header, never in the URL, so it cannot end up in request logs.
+  const url = `https://graph.facebook.com/${opts.apiVersion ?? DEFAULT_META_API_VERSION}/${connection.settings.datasetId}/events`;
   const body = {
     data: [event],
     ...(connection.settings.testEventCode ? { test_event_code: connection.settings.testEventCode } : {}),
@@ -100,7 +115,11 @@ export async function sendMeta(
 
   let res: Response;
   try {
-    res = await timedFetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }, opts);
+    res = await timedFetch(
+      url,
+      { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${connection.token}` }, body: JSON.stringify(body) },
+      opts,
+    );
   } catch (err) {
     return { outcome: 'retry', error: `network: ${err instanceof Error ? err.message : 'error'}` };
   }
@@ -116,7 +135,9 @@ export async function sendMeta(
   }
 
   const e = json?.error ?? {};
-  const message = `meta ${res.status}${e.code ? ` code ${e.code}` : ''}: ${e.message ?? 'error'}`;
+  // error_user_msg is Meta's plain explanation (e.g. which parameter is wrong); keep it next to the technical message.
+  const userMsg = [e.error_user_title, e.error_user_msg].filter(Boolean).join(': ');
+  const message = `meta ${res.status}${e.code ? ` code ${e.code}` : ''}${e.error_subcode ? `/${e.error_subcode}` : ''}: ${e.message ?? 'error'}${userMsg ? ` (${userMsg})` : ''}`;
   if (e.code !== undefined && AUTH_CODES.has(e.code)) return { outcome: 'failed', error: message, authError: true };
   if (res.status >= 500 || res.status === 429 || e.is_transient || (e.code !== undefined && TRANSIENT_CODES.has(e.code))) {
     return { outcome: 'retry', error: message };

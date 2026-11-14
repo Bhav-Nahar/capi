@@ -61,6 +61,7 @@ function toTenant(id: string, d: DocumentData): TenantConfig {
     defaultCountry: d.defaultCountry,
     retentionDays: d.retentionDays,
     sources: d.sources ?? {},
+    ...(d.placeholderEmails ? { placeholderEmails: d.placeholderEmails } : {}),
     // A Firestore Timestamp when read back, a plain Date when built in memory at creation.
     createdAt: d.createdAt instanceof Date ? d.createdAt : d.createdAt.toDate(),
   };
@@ -215,7 +216,7 @@ export class TenantRegistry {
 
   async update(
     tenantId: string,
-    patch: Partial<Pick<TenantConfig, 'name' | 'status' | 'consentPolicy' | 'allowedChannels' | 'destinations' | 'defaultCountry' | 'retentionDays'>>,
+    patch: Partial<Pick<TenantConfig, 'name' | 'status' | 'consentPolicy' | 'allowedChannels' | 'destinations' | 'defaultCountry' | 'retentionDays' | 'placeholderEmails'>>,
   ): Promise<void> {
     if (!(await this.getTenant(tenantId))) throw new Error('unknown_tenant');
     await this.tenants.doc(tenantId).update(patch);

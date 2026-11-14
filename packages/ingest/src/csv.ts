@@ -76,7 +76,7 @@ export interface ImportRow {
  * email, store, consent, eventName (header names are case-insensitive; eventId, channel and occurredAt are required).
  * Date-only values (2026-10-07) are read as noon in `dateOnlyOffset`.
  */
-export function salesFromCsv(text: string, dateOnlyOffset = '+05:30', maxRows = 1000): { rows: ImportRow[]; error?: string } {
+export function salesFromCsv(text: string, dateOnlyOffset = '+05:30', maxRows = 1000, now: Date = new Date()): { rows: ImportRow[]; error?: string } {
   const parsed = parseCsvChecked(text);
   if (parsed.error) return { rows: [], error: `The file is not valid CSV: ${parsed.error}` };
   const table = parsed.rows;
@@ -105,7 +105,10 @@ export function salesFromCsv(text: string, dateOnlyOffset = '+05:30', maxRows = 
       if (v !== undefined) record[col] = v;
     }
     if (typeof record.occurredAt === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(record.occurredAt)) {
-      record.occurredAt = `${record.occurredAt}T12:00:00${dateOnlyOffset}`;
+      // A date without a time is placed at noon so it cannot slip to another day in UTC. For today's date before noon
+      // that would be in the future (and refused), so today's sales take the current time instead.
+      const noon = `${record.occurredAt}T12:00:00${dateOnlyOffset}`;
+      record.occurredAt = record.occurredAt === localDay(now, dateOnlyOffset) && new Date(noon) > now ? now.toISOString() : noon;
     }
     if (typeof record.consent === 'string') {
       const c = record.consent.toLowerCase();
@@ -115,7 +118,7 @@ export function salesFromCsv(text: string, dateOnlyOffset = '+05:30', maxRows = 
     }
     if (typeof record.channel === 'string') record.channel = record.channel.toLowerCase();
 
-    const mapped = mapGenericSale(record);
+    const mapped = mapGenericSale(record, now);
     const line = i + 2;
     if (!mapped.ok) return { line, ok: false, error: describe(mapped.reason, mapped.detail) };
     return { line, ok: true, sale: { ...mapped.sale, source: 'import' } };
@@ -123,12 +126,21 @@ export function salesFromCsv(text: string, dateOnlyOffset = '+05:30', maxRows = 
   return { rows };
 }
 
+/** The calendar day (YYYY-MM-DD) at `now` in a fixed offset like +05:30. */
+function localDay(now: Date, offset: string): string {
+  const m = /^([+-])(\d{2}):(\d{2})$/.exec(offset);
+  const shiftMs = m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) * 60_000 : 0;
+  return new Date(now.getTime() + shiftMs).toISOString().slice(0, 10);
+}
+
 function describe(reason: string, detail?: string): string {
   const text: Record<string, string> = {
     missing_deal_id: 'eventId is empty',
     unknown_channel: 'channel must be one of: store, online, whatsapp, web_lead',
-    invalid_date: 'occurredAt must be a date like 2026-10-07 or a full timestamp',
+    invalid_date: 'occurredAt must be a date like 2026-10-07 or a full timestamp, not in the future',
     invalid_amount: 'value is not a number',
+    missing_value: 'value is required for a Purchase',
+    unsupported_event: 'eventName must be Purchase (or left empty)',
     invalid_consent: 'consent must be yes or no, or left empty if not stated',
     invalid_payload: 'row could not be read',
   };

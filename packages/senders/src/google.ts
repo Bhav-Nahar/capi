@@ -1,7 +1,7 @@
 import type { Channel } from '@datahash/core';
 import type { GoogleAdsSettings } from '@datahash/store';
 import { forgetServiceAccountToken, serviceAccountAccessToken, type ServiceAccountKey } from './google-service-account';
-import { timedFetch, type HttpOptions, type SendContext, type SendResult } from './types';
+import { purchaseProblem, timedFetch, type HttpOptions, type SendContext, type SendResult } from './types';
 
 /**
  * Google Data Manager API (replaces the retired Google Ads `uploadClickConversions` path).
@@ -65,8 +65,10 @@ const EVENT_SOURCE: Record<Channel, EventSource> = {
 };
 
 /**
- * Google's older rule said gbraid/wbraid conversions cannot carry user identifiers. The Data Manager reference does
- * not repeat it, so this stays conservative until verified on a real account. VERIFY.
+ * Google's older rule (Google Ads API) said gbraid/wbraid conversions cannot carry user identifiers. The Data Manager
+ * "Send events" guide (checked Nov 2026) neither states nor repeats that rule, and its sample combines gclid with
+ * userData. This stays off until one validate-only request with a gbraid and a hashed email passes on a real account;
+ * then switch it on, because hashed email and phone are what enhanced conversions for leads matches on.
  */
 const SEND_USER_DATA_WITH_BRAID = false;
 
@@ -100,17 +102,16 @@ export interface IngestRequest {
 }
 
 export function buildGoogleEvent({ sale, touch }: SendContext): DataManagerEvent | null {
+  if (sale.value === undefined || !sale.currency) return null;
   const event: DataManagerEvent = {
     // ISO 8601 in UTC. Real event time, never the time of sending.
     eventTimestamp: sale.occurredAt.toISOString(),
     // The same ID on every retry and the key Google deduplicates on, across sources too.
     transactionId: sale.eventId,
     eventSource: EVENT_SOURCE[sale.channel],
+    conversionValue: sale.value,
+    currency: sale.currency,
   };
-  if (sale.value !== undefined) {
-    event.conversionValue = sale.value;
-    event.currency = sale.currency ?? 'INR';
-  }
 
   const braidOnly = Boolean(touch && !touch.gclid && (touch.gbraid || touch.wbraid));
   if (touch?.gclid) event.adIdentifiers = { gclid: touch.gclid };
@@ -239,6 +240,8 @@ export async function sendGoogle(
   app: GoogleAppCredentials,
   opts: HttpOptions & { apiVersion?: string; now?: () => number; validateOnly?: boolean; baseUrl?: string } = {},
 ): Promise<SendResult> {
+  const problem = purchaseProblem(ctx.sale, new Date(opts.now ? opts.now() : Date.now()));
+  if (problem) return { outcome: 'failed', error: problem };
   const request = buildGoogleRequest(ctx, connection.settings, opts.validateOnly ?? false);
   if (!request) return { outcome: 'failed', error: 'no_identifiers: no click ID, hashed email or phone to match on' };
 

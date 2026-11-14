@@ -285,7 +285,9 @@ describe.skipIf(!emulator)('admin API (Firestore emulator)', () => {
     const a = await newBrand();
     const b = await newBrand();
     const today = new Date().toISOString().slice(0, 10);
-    await importCsv(call, a.tenant.tenantId, `eventId,channel,occurredAt\nONLY-A,store,${today}`);
+    await importCsv(call, a.tenant.tenantId, `eventId,channel,occurredAt,value\nONLY-A,store,${today},100`);
+    const listA = (await call('GET', `/tenants/${a.tenant.tenantId}/sales`)).body as { sales: unknown[] };
+    expect(listA.sales).toHaveLength(1);
     const listB = (await call('GET', `/tenants/${b.tenant.tenantId}/sales`)).body as { sales: unknown[] };
     expect(listB.sales).toEqual([]);
   });

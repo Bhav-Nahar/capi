@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { importCsv } from './import-helper';
 import { processSale } from '@datahash/ingest';
-import { previewPayload } from '@datahash/senders';
+import { DEFAULT_META_API_VERSION, previewPayload } from '@datahash/senders';
 import { ConnectionsRepo, createFirestore, SalesRepo, SecretBox, Store, TenantRegistry } from '@datahash/store';
 import { handleAdmin, type AdminDeps } from '../src';
 
@@ -150,7 +150,7 @@ describe.skipIf(!emulator)('admin: tracking address and payload preview (Firesto
     const key = sales.sales[0]!.saleKey;
 
     const meta = (await call('GET', `/tenants/${id}/sales/${key}/deliveries/meta/preview`)).body as { url: string; body: { data: Array<{ event_id: string; action_source: string; user_data: Record<string, unknown> }>; test_event_code?: string }; notes: string[] };
-    expect(meta.url).toBe('https://graph.facebook.com/v21.0/999/events');
+    expect(meta.url).toBe(`https://graph.facebook.com/${DEFAULT_META_API_VERSION}/999/events`);
     expect(meta.body.test_event_code).toBe('TEST123');
     expect(meta.body.data[0]).toMatchObject({ event_id: 'P1', action_source: 'physical_store' });
     expect(meta.body.data[0]!.user_data.fbc).toBe(`fb.1.${clickedAt.getTime()}.F-preview`);
@@ -173,7 +173,7 @@ describe.skipIf(!emulator)('admin: tracking address and payload preview (Firesto
     const created = (await call('POST', '/tenants', { name: 'Unconnected' })).body as View;
     const id = created.tenant.tenantId;
     const today = new Date().toISOString().slice(0, 10);
-    await importCsv(call, id, `eventId,channel,occurredAt,phone,consent\nU1,store,${today},9876543210,yes`);
+    await importCsv(call, id, `eventId,channel,occurredAt,value,phone,consent\nU1,store,${today},100,9876543210,yes`);
     const key = ((await call('GET', `/tenants/${id}/sales`)).body as { sales: Array<{ saleKey: string }> }).sales[0]!.saleKey;
     const meta = (await call('GET', `/tenants/${id}/sales/${key}/deliveries/meta/preview`)).body as { url: string; notes: string[] };
     expect(meta.url).toContain('<dataset id>');

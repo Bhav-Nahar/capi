@@ -1,4 +1,4 @@
-import { normalizeFbp } from '@datahash/core';
+import { isPlaceholderEmail, normalizeFbp, type PlaceholderEmailRule } from '@datahash/core';
 import type { IdentifyInput, IdentifyResult } from '@datahash/store';
 import { cookieName, mergeClicks, openTouches, parseCookies, clearCookieHeader } from './first-party';
 
@@ -10,6 +10,8 @@ export interface SiteLookup {
   consentMode: 'opt_in' | 'opt_out';
   retentionDays: number;
   defaultCountry: NonNullable<IdentifyInput['defaultCountry']>;
+  /** The brand's made-up emails, dropped before a person is stored or looked up. */
+  placeholderEmails?: PlaceholderEmailRule;
   /** The brand's own tracking address (see SiteKeyRecord.trackingHost). */
   trackingHost?: string;
 }
@@ -151,7 +153,10 @@ export async function handleIdentify(
 
   const identifyInput: IdentifyInput = { now, touches };
   if (phone) identifyInput.phone = phone as string;
-  if (email) identifyInput.email = email as string;
+  // A made-up email says nothing about the customer: keep it out of the person record.
+  const usableEmail = email && !isPlaceholderEmail(email as string, phone as string | undefined, tenant.placeholderEmails, tenant.defaultCountry);
+  if (usableEmail) identifyInput.email = email as string;
+  if (!identifyInput.phone && !identifyInput.email) return { status: 202, body: { status: 'skipped', reason: 'placeholder_email' } };
   identifyInput.defaultCountry = tenant.defaultCountry;
   if (adsConsent !== undefined) identifyInput.consent = { ads: adsConsent, source: 'tracker' };
   // Meta's browser ID: a malformed value is ignored rather than failing the whole call.
